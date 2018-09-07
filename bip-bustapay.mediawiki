@@ -71,7 +71,7 @@ The receiver is then responsible for validating the template transaction. If the
 
 Should the receiver reject a transaction, it should not attempt to propagate it on the network.
 
-=== Contributed Input Choice ==
+== Contributed Input Choice ==
 The receiver must add exactly 1 input to the transaction (the "contributed input"). If the receiver has no inputs, it should use a 500 internal server error, so the client can send the transaction as per normal (or try again later).
 
 The contributed input must not add too much weight to transaction, so must only use a P2SH-P2WPKH input OR something that adds less transaction weight.
@@ -116,8 +116,7 @@ For anyone wanting to implement bustapay payments, here are some notes for recei
 Notes for sending applications:
 
 * The HTTP response must *not* be trusted. It should be fully validated that no unexpected changes have been made to the transaction.
-* The sender should be aware the original "template transaction" may be propagated at any time, and in fact can intentionally be
-  done so for the purpose of RBF as it should have a slightly higher fee rate.
+* The sender should be aware the original "template transaction" may be propagated at any time, and in fact can intentionally be done so for the purpose of RBF as it should have a slightly higher fee rate.
 
 == Credits ==
 The idea is obviously based upon Dr. Maxwell's seminal CoinJoin proposal, and reduced scope inspired by a simplification of the "pay 2 endpoint" (now offline) blog post by blockstream.
