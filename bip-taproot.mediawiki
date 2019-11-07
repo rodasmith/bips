@@ -79,7 +79,7 @@ The following rules only apply when such an output is being spent. Any other out
 **** If ''path<sub>j</sub> &ge; proof<sub>j</sub>'': ''path<sub>j+1</sub> = hash<sub>TapBranch</sub>(proof<sub>j</sub> || path<sub>j</sub>)''.
 ** Let ''tweak = hash<sub>TapTweak</sub>(leaf_key_p || path<sub>m</sub>)''.
 ** If ''tweak &ge; 0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141'' (order of secp256k1), fail.
-** Let ''output_point_Q = point(output_pubkey_q) if (control_block[0] & 1) = 1 and -point(output_key) otherwise''. Fail if this point is not on the curve.
+** Let ''output_point_Q = point(output_pubkey_q) if (control_block[0] & 1) = 1 and -point(output_pubkey_q) otherwise''. Fail if this point is not on the curve.
 ** If ''output_point_Q &ne; P + int(tweak)G'', fail.
 ** Execute the script, according to the applicable script rules<ref>'''What are the applicable script rules in script path spends?''' Bip-tapscript specifies validity rules that apply if the leaf version is ''0xc0'', but future proposals can introduce rules for other leaf versions.</ref>, using the witness stack elements excluding ''script'', ''control_block'', and the annex ''a'' if present, as initial stack.
 
