@@ -9,6 +9,7 @@
   Type: Standards Track
   Created:
   License: BSD-3-Clause
+  Requires: bip-schnorr
 </pre>
 
 ==Introduction==
@@ -64,10 +65,10 @@ The following rules only apply when such an output is being spent. Any other out
 ** The single witness stack element is interpreted as the signature and must be valid (see the next section) for the public key ''output_pubkey_q'' and taproot transaction digest (to be defined hereinafter) as message. Fail if it is not. Otherwise pass.
 * If there are at least two witness elements left, script path spending is used:
 ** Call the second-to-last stack element ''script''.
-** Call the last stack element ''control_block''. ''control_block'' must have length ''33 + 32m'', for a value of ''m'' that is an integer between 0 and 128<ref>'''Why is the Merkle path length limited to 128?''' The optimally space-efficient Merkle tree can be constructed based on the probabilities of the scripts in the leaves, using the Huffman algorithm. This algorithm will construct branches with lengths approximately equal to ''log<sub>2</sub>(1/probability)'', but to have branches longer than 128 you would need to have scripts with an execution chance below 1 in ''2<sup>128</sup>''. As that is our security bound, scripts that truly have such a low chance can probably be removed entirely.</ref>, inclusive. Fail if ''control_block'' does not have such a length. ''control_block'' encodes ''leaf_key_p'' (the Merkle leaf to validate for inclusion in the tree) and ''proof'' (the proof that the leaf to validate is in the tree, ''proof'' comprising the hash of the sibling of each ''path'' element from that leaf to the Merkle root).
-** Let ''leaf_key_p = control_block[1:33]'' and let ''P = point(leaf_key_p)'' where ''point'' is defined as in bip-schnorr. Fail if this point is not on the curve.
+** Call the last stack element ''control_block''. ''control_block'' must have length ''33 + 32m'', for a value of ''m'' that is an integer between 0 and 128<ref>'''Why is the Merkle path length limited to 128?''' The optimally space-efficient Merkle tree can be constructed based on the probabilities of the scripts in the leaves, using the Huffman algorithm. This algorithm will construct branches with lengths approximately equal to ''log<sub>2</sub>(1/probability)'', but to have branches longer than 128 you would need to have scripts with an execution chance below 1 in ''2<sup>128</sup>''. As that is our security bound, scripts that truly have such a low chance can probably be removed entirely.</ref>, inclusive. Fail if ''control_block'' does not have such a length.
+** Let ''leaf_key_p = control_block[1:33]'' and let ''P = point(leaf_key_p)'' where ''point'' and ''[:]'' are defined as in bip-schnorr. Fail if this point is not on the curve.
 ** Let ''leaf_version = control_block[0] & 0xfe''.<ref>'''What is the purpose of the first byte of the control block?''' The first byte of the control block has three distinct functions:
-* The low bit is used to denote whether the ''has_square_y(output_point_Q)'' holds.<ref>'''Why is the squareness of the output public key's Y coordinate required in a script path spend?''' The ''point'' function always constructs a point with Y coordinate having that property, but because ''output_point_Q'' is constructed by adding the taproot tweak to the internal public key ''P'', it cannot easily be guaranteed that ''output_point_Q'' in fact has such a Y coordinate. We can not ignore the Y coordinate because it would prevent batch verification. Trying out multiple internal keys until there's such a ''output_point_Q'' is possible but undesirable and unnecessary since this information about the Y coordinate only consumes an unused bit.</ref>
+* The low bit is used to denote whether the ''has_square_y(output_point_Q)'' holds.<ref>'''Why is the squareness of the output public key's Y coordinate required in a script path spend?''' The ''point'' function always constructs a point with Y coordinate having that property, but because ''output_point_Q'' is constructed by adding the taproot tweak to the internal public key ''P'', it cannot easily be guaranteed that ''output_point_Q'' in fact has such a Y coordinate. We can not ignore the Y coordinate because it would prevent batch verification. Trying out multiple internal keys until there's such an ''output_point_Q'' is possible but undesirable and unnecessary since this information about the Y coordinate only consumes an unused bit.</ref>
 * By keeping the top two bits set to true, it can be guaranteed that scripts can be recognized without knowledge of the UTXO being spent, simplifying analysis. This is because such values cannot occur as first byte of the final stack element in either P2WPKH or P2WSH spends.
 * The remaining five bits are used for introducing new script versions that are not observable unless actually executed.
 </ref>.
@@ -75,8 +76,9 @@ The following rules only apply when such an output is being spent. Any other out
 ** For ''j'' in ''[0,1,...,m-1]'':
 *** Let ''proof<sub>j</sub> = control_block[33+32j:65+32j]''. Each such element of the Merkle proof represents an unexecuted branch of the tree to concatenate with the executed branch ''path<sub>j</sub>'' and then hash into the parent element of the executed path (''path<sub>j+1</sub>''), iterating up to the Merkle root to prove cryptographically that the ''tapleaf hash'' is a member of the tree with the given Merkle root.
 *** Let ''path<sub>j+1</sub> depend on whether ''path<sub>j</sub> < proof<sub>j</sub>'' (lexicographically)<ref>'''Why are child elements sorted before hashing in the Merkle tree?''' By doing so, it is not necessary to reveal the left/right directions along with the hashes in revealed Merkle branches. This is possible because we do not actually care about the position of specific scripts in the tree; only that they are actually committed to.</ref>:
-**** If ''path<sub>j</sub> < proof<sub>j</sub>'': ''path<sub>j+1</sub> = hash<sub>TapBranch</sub>(path<sub>j</sub> || proof<sub>j</sub>)''<ref>'''Why not use a more efficient hash construction for inner Merkle nodes?''' The chosen construction does require two invocations of the SHA256 compression functions, one of which can be avoided in theory (see BIP98). However, it seems preferable to stick to constructions that can be implemented using standard cryptographic primitives, both for implementation simplicity and analyzability. If necessary, a significant part of the second compression function can be optimized out by [https://github.com/bitcoin/bitcoin/pull/13191 specialization] for 64-byte inputs.</ref>.
+**** If ''path<sub>j</sub> < proof<sub>j</sub>'': ''path<sub>j+1</sub> = hash<sub>TapBranch</sub>(path<sub>j</sub> || proof<sub>j</sub>)''<ref>'''Why not use a more efficient hash construction for inner Merkle nodes?''' The chosen construction does require two invocations of the SHA256 compression functions, one of which can be avoided in theory (see [https://github.com/bitcoin/bips/blob/master/bip-0098.mediawiki BIP98]). However, it seems preferable to stick to constructions that can be implemented using standard cryptographic primitives, both for implementation simplicity and analyzability. If necessary, a significant part of the second compression function can be optimized out by [https://github.com/bitcoin/bitcoin/pull/13191 specialization] for 64-byte inputs.</ref>.
 **** If ''path<sub>j</sub> &ge; proof<sub>j</sub>'': ''path<sub>j+1</sub> = hash<sub>TapBranch</sub>(proof<sub>j</sub> || path<sub>j</sub>)''.
+** Let ''tweak = hash<sub>TapTweak</sub>(leaf_key_p || path<sub>m</sub>)''.
 ** Let ''tweak = hash<sub>TapTweak</sub>(leaf_key_p || path<sub>m</sub>)''.
 ** If ''tweak &ge; 0xFFFFFFFF FFFFFFFF FFFFFFFF FFFFFFFE BAAEDCE6 AF48A03B BFD25E8C D0364141'' (order of secp256k1), fail.
 ** Let ''output_point_Q = point(output_pubkey_q) if (control_block[0] & 1) = 1 and -point(output_pubkey_q) otherwise''. Fail if this point is not on the curve.
@@ -100,7 +102,7 @@ The following rules apply:
 
 ==== hash_type ====
 
-<code>hash_type</code> is an 8-bit unsigned value. The <code>SIGHASH</code> encodings from the legacy script system are used, including <code>SIGHASH_ALL</code>, <code>SIGHASH_NONE</code>, <code>SIGHASH_SINGLE</code>, and <code>SIGHASH_ANYONECANPAY</code>
+<code>hash_type</code> is an 8-bit unsigned value. The <code>SIGHASH</code> encodings from the legacy script system are used, including <code>SIGHASH_ALL</code>, <code>SIGHASH_NONE</code>, <code>SIGHASH_SINGLE</code>, and <code>SIGHASH_ANYONECANPAY</code>. Use of the default <code>hash_type = 0x00</code> results in signing over the whole transaction just as for <code>SIGHASH_ALL</code>.
 
 The following use of <code>hash_type</code> are invalid, and fail execution:
 
@@ -141,9 +143,9 @@ As the message for signature verification, transaction digest is ''hash<sub>TapS
 ** If the <code>SIGHASH_SINGLE</code> flag is set:
 *** <code>sha_single_output</code> (32): the SHA256 of the corresponding output in <code>CTxOut</code> format.
 
-The total number of bytes hashed is at most ''211''<ref>'''What is the number of bytes hashed for the signature hash?''' The total size of the input to ''hash<sub>TapSighash</sub>'' (excluding the initial 64-byte hash tag) can be computed using the following formula: ''178 - is_anyonecanpay * 52 - is_none * 32 + has_annex * 32''.</ref>.
+The total number of bytes hashed is at most ''211'' (excluding sub-hashes such as `sha_prevouts`)<ref>'''What is the number of bytes hashed for the signature hash?''' The total size of the input to ''hash<sub>TapSighash</sub>'' (excluding the initial 64-byte hash tag) can be computed using the following formula: ''178 - is_anyonecanpay * 52 - is_none * 32 + has_annex * 32''.</ref>.  Sub-hashes may be cached across signatures of the same transaction.
 
-In summary, the semantics of the BIP143 sighash types remain unchanged, except the following:
+In summary, the semantics of the [https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki BIP143] sighash types remain unchanged, except the following:
 # The way and order of serialization is changed.<ref>'''Why is the serialization in the transaction digest changed?''' Hashes that go into the digest and the digest itself are now computed with a single SHA256 invocation instead of double SHA256. There is no expected security improvement by doubling SHA256 because this only protects against length-extension attacks against SHA256 which are not a concern for transaction digests because there is no secret data. Therefore doubling SHA256 is a waste of resources. The digest computation now follows a logical order with transaction level data first, then input data and output data. This allows to efficiently cache the transaction part of the digest across different inputs using the SHA256 midstate. Additionally, digest computation avoids unnecessary hashing as opposed to BIP143 digests in which parts may be set zero and before hashing them. Despite that, collisions are made impossible by committing to the length of the data (implicit in <code>hash_type</code> and <code>spend_type</code>) before the variable length data.</ref>
 # The digest commits to the <code>scriptPubKey</code><ref>'''Why does the transaction digest commit to the <code>scriptPubKey</code>?''' This prevents lying to offline signing devices about output being spent, even when the actually executed script (<code>scriptCode</code> in BIP143) is correct. This means it's possible to compactly prove to a hardware wallet what (unused) execution paths existed.</ref>.
 # If the <code>SIGHASH_ANYONECANPAY</code> flag is not set, the digest commits to the amounts of ''all'' transaction inputs.<ref>'''Why does the transaction digest commit to the amounts of all transaction inputs?''' This eliminates the possibility to lie to offline signing devices about the fee of a transaction.</ref>
@@ -161,7 +163,7 @@ Satisfying any of these conditions is sufficient to spend the output.
 '''Initial steps''' The first step is determining what the internal key and the organization of the rest of the scripts should be. The specifics are likely application dependent, but here are some general guidelines:
 * When deciding between scripts with conditionals (<code>OP_IF</code> etc.) and splitting them up into multiple scripts (each corresponding to one execution path through the original script), it is generally preferable to pick the latter.
 * When a single condition requires signatures with multiple keys, key aggregation techniques like MuSig can be used to combine them into a single key. The details are out of scope for this document, but note that this may complicate the signing procedure.
-* If one or more of the spending conditions consist of just a single key (after aggregation), the most likely one should be made the internal key. If no such condition exists, it may be worthwhile adding one that consists of an aggregation of all keys participating in all scripts combined; effectively adding an "everyone agrees" branch. If that is inacceptable, pick as internal key a point with unknown discrete logarithm. One example of such a point is ''H = point(0x0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0)'' which is [https://github.com/ElementsProject/secp256k1-zkp/blob/11af7015de624b010424273be3d91f117f172c82/src/modules/rangeproof/main_impl.h#L16 constructed] by taking the hash of the standard uncompressed encoding of secp256k1 generator ''G'' as X coordinate. In order to avoid leaking the information that key path spending is not possible it is recommended to pick a fresh integer ''r'' in the range ''0...n-1'' uniformly at random and use ''H + rG'' as internal key. It is possible to prove that this internal key does not have a known discrete logarithm with respect to ''G'' by revealing ''r'' to a verifier who can then reconstruct how the internal key was created.
+* If one or more of the spending conditions consist of just a single key (after aggregation), the most likely one should be made the internal key. If no such condition exists, it may be worthwhile adding one that consists of an aggregation of all keys participating in all scripts combined; effectively adding an "everyone agrees" branch. If that is inacceptable, pick as internal key a point with unknown discrete logarithm. One example of such a point is ''H = point(0x0250929b74c1a04954b78b4b6035e97a5e078a5a0f28ec96d547bfee9ace803ac0)'' which is [https://github.com/ElementsProject/secp256k1-zkp/blob/11af7015de624b010424273be3d91f117f172c82/src/modules/rangeproof/main_impl.h#L16 constructed] by taking the hash of the standard uncompressed encoding of the [https://www.secg.org/sec2-v2.pdf secp256k1] base point ''G'' as X coordinate. In order to avoid leaking the information that key path spending is not possible it is recommended to pick a fresh integer ''r'' in the range ''0...n-1'' uniformly at random and use ''H + rG'' as internal key. It is possible to prove that this internal key does not have a known discrete logarithm with respect to ''G'' by revealing ''r'' to a verifier who can then reconstruct how the internal key was created.
 * If the spending conditions do not require a script path, the output key should commit to an unspendable script path instead of having no script path. This can be achieved by computing the output key point as ''output_point_Q = P + int(hash<sub>TapTweak</sub>(bytes(P)))G''. <ref>'''Why should the output key always have a taproot commitment, even if there is no script path?'''
 If the taproot output key is an aggregate of keys, there is the possibility for a malicious party to add a script path without being noticed by the other parties.
 This allows to bypass the multiparty policy and to steal the coin.
@@ -176,7 +178,7 @@ Alice will not be able to notice the script path, but Mallory can unilaterally s
 </ref>
 * The remaining scripts should be organized into the leaves of a binary tree. This can be a balanced tree if each of the conditions these scripts correspond to are equally likely. If probabilities for each condition are known, consider constructing the tree as a Huffman tree.
 
-'''Computing the output script''' Once the spending conditions are split into an internal key <code>internal_pubkey</code> and a binary tree whose leaves are (leaf_version, script) tuples, the output script can be computed using the following Python3 algorithms with helper functions from the bip-schnorr reference code for integer conversion, point multiplication and tagged hashes.
+'''Computing the output script''' Once the spending conditions are split into an internal key <code>internal_pubkey</code> and a binary tree whose leaves are (leaf_version, script) tuples, the output script can be computed using the Python3 algorithms below. These algorithms take advantage of helper functions from the [https://github.com/sipa/bips/blob/bip-schnorr/bip-schnorr/reference.py bip-schnorr reference code] for integer conversion, point multiplication, and tagged hashes.
 
 First, we define <code>taproot_tweak_pubkey</code> for 32-byte bip-schnorr public key arrays.
 In addition to the tweaked public key byte array, the function returns a boolean for the squareness of the tweaked points' Y coordinate modulo the secp256k1 field order.
@@ -194,7 +196,7 @@ def taproot_tweak_pubkey(pubkey, h):
 
 def taproot_tweak_seckey(seckey0, h):
     P = point_mul(G, int_from_bytes(seckey0))
-    seckey = SECP256K1_ORDER - seckey0 if not has_square_y(R) else seckey
+    seckey = SECP256K1_ORDER - seckey0 if not has_square_y(P) else seckey
     t = int_from_bytes(tagged_hash("TapTweak", bytes_from_int(x(P)) + h))
     if t >= SECP256K1_ORDER:
         raise ValueError
@@ -254,7 +256,7 @@ This function returns the witness stack necessary and a <code>sighash</code> fun
 def taproot_sign_script(internal_pubkey, script_tree, script_num, inputs):
     info, h = taproot_tree_helper(script_tree)
     (leaf_version, script), path = info[script_num]
-    _, is_y_square = taproot_tweak_pubkey(internal_pubkey, t)
+    _, is_y_square = taproot_tweak_pubkey(internal_pubkey, h)
     output_pubkey_tag = 0 if is_y_square else 1
     pubkey_data = bytes([output_pubkey_tag + leaf_version]) + internal_pubkey
     return inputs + [script, pubkey_data + path]
@@ -270,7 +272,7 @@ A script path spend leaks that there is a script path and that the key path was 
 Moreover, the depth of a script in the Merkle root leaks information including the minimum depth of the tree, which suggests specific wallet software that created the output and helps clustering.
 Therefore, the privacy of script spends can be improved by deviating from the optimal tree determined by the probability distribution over the leaves.
 
-Just like other existing output types, taproot outputs should never reuse keys.
+Just like other existing output types, taproot outputs should never reuse keys, for privacy reasons.
 This does not only apply to the particular leaf that was used to spend an output but to all leaves committed to in the output.
 If leaves were reused, it could happen that spending a different output would reuse the same Merkle branches in the Merkle proof.
 Using fresh keys implies that taproot output construction does not need to take special measures to randomizing leaf positions because they are already randomized due to the branch-sorting Merkle tree construction used in taproot.
@@ -298,11 +300,11 @@ Non-upgraded nodes, however, will consider all SegWit version 1 witness programs
 They are strongly encouraged to upgrade in order to fully validate the new programs.
 
 Non-upgraded wallets can receive and send bitcoin from non-upgraded and upgraded wallets using SegWit version 0 programs, traditional pay-to-pubkey-hash, etc.
-Depending on the implementation non-upgraded wallets may be able to send to Segwit version 1 programs if they support sending to BIP173 Bech32 addresses.
+Depending on the implementation non-upgraded wallets may be able to send to Segwit version 1 programs if they support sending to [https://github.com/bitcoin/bips/blob/master/bip-0173.mediawiki BIP173] Bech32 addresses.
 
 == Acknowledgements ==
 
-This document is the result of discussions around script and signature improvements with many people, and had direct constributions from Jonas Nick, Anthony Towns, Greg Maxwell, and others. It further builds on top of earlier published proposals such as Taproot by Greg Maxwell, and Merkle branch constructions by Russell O'Connor, Johnson Lau, and Mark Friedenbach.
+This document is the result of discussions around script and signature improvements with many people, and had direct contributions from Jonas Nick, Anthony Towns, Greg Maxwell, and others. It further builds on top of earlier published proposals such as Taproot by Greg Maxwell, and Merkle branch constructions by Russell O'Connor, Johnson Lau, and Mark Friedenbach.
 
 Thanks to Arik Sosman for suggesting to sort Merkle node children before hashes, removing the need to transfer the position in the tree.
 
